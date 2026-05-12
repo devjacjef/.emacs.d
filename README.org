@@ -1,0 +1,167 @@
+#+TITLE: Jack Jefferson's Emacs Configuration
+#+AUTHOR: Jack Jefferson
+:PROPERTIES:
+#+PROPERTY: header-args :tangle yes
+#+OPTIONS: toc:2
+#+STARTUP: overview
+:END:
+
+* About
+
+This is my Emacs configuration forked from [[https://github.com/jamescherti/minimal-emacs.d][minimal-emacs.d by James Cherti]]. My
+goal is to provide myself with a configurable IDE and text-processing
+environment that can match my preferred workflows. A lot of this configuration
+is snippets I have lifted from others and I have attributed them correctly at
+the bottom of this configuration.
+
+* Setup
+
+The following steps can be used to clone and install my configuration.
+
+#+BEGIN_SRC shell
+  git clone https://github.com/devjacjef/emacs ~/.emacs.d
+  # TODO Add Makefile
+#+END_SRC
+
+To update my configuration the following steps can be followed.
+
+#+BEGIN_SRC shell
+  git pull
+  # TODO Add Makefile
+#+END_SRC
+
+* Asynchronous Package Manager
+
+Emacs by default uses a synchronous package manager which works just fine
+however, is slower compared to an alternative called =elpaca=. Elpaca provides
+an asynchronous experience installing multiple packages at the same time.
+
+* Aesthetics
+
+Configures visual adjustments to my liking. This involves creating more spacing
+around windows, a cleaner mode-line and colour scheme adjustments.
+
+#+BEGIN_SRC emacs-lisp
+  ;; TODO Setup Spacious Padding
+
+  ;; TODO Setup Custom Mode-line
+
+  ;; TODO Setup Nice Colour Scheme
+#+END_SRC
+
+* Completion
+
+Configuration for 'completion-at-point' which provides in-buffer completion and
+'completing-read' which provides mini-buffer completion.
+
+Popular packages for tackling 'completion-at-point' include =corfu= and to
+manage it's 'completion-at-point-functions' combined with =cape= to provide some
+extensions. 
+
+#+BEGIN_SRC emacs-lisp 
+  ;; TODO Setup Corfu
+
+  ;; TODO Setup Cape
+#+END_SRC
+
+For handling the 'completing-read' I am going to be using =vertico=
+alongside =marginalia=, =consult= and =orderless= to provide a
+complete completion experience.
+
+#+BEGIN_SRC emacs-lisp 
+  ;; TODO Setup Vertico
+
+  ;; TODO Setup Vertico Posframe
+
+  ;; TODO Setup Marginalia
+
+  ;; TODO Setup Consult
+
+  ;; TODO Setup Orderless
+#+END_SRC
+
+* Search Utilities
+
+** TODO Add description
+
+#+BEGIN_SRC emacs-lisp 
+  ;; TODO Setup Consult
+
+  ;; TODO Setup Grep-like tools
+#+END_SRC
+
+* Programming
+
+Various configurations for different programming languages. My configuration is
+tailored to Web Development with occasional investments into other domains.
+
+** Tree-sitter
+
+** TODO Add description
+
+** Programming Languages
+
+*** TODO Add description
+
+*** PHP
+
+**** TODO Add description
+
+*** JS/TS
+
+**** TODO Add description
+
+*** HTML/CSS
+
+**** TODO Add description
+
+* Org
+
+** TODO Add description
+
+* LSP
+
+This is setup for my LSP client that I will be using for my Emacs environment.
+Emacs provides a built-in LSP client called =eglot= which is light-weight and
+fit for use.
+
+#+BEGIN_SRC emacs-lisp
+  ;; TODO Setup Eglot
+
+  ;; TODO Setup Eglot Typescript Setup
+#+END_SRC
+
+* Git
+
+Git version control is a vital part of my workflow in any environment. Emacs
+pioneered GUI VCS with =magit= which remains the most useful tool for Git in any
+editor.
+
+#+BEGIN_SRC emacs-lisp
+  ;; TODO Setup Magit
+#+END_SRC
+
+* Agentic Engineering
+
+Agentic Engineering involves using LLMs in the form of agents who have the
+ability to tool call and perform complex operations through prompts. Emacs has
+seen a lot of development from the community to get these tools integrated into
+their configurations.
+
+My configuration integrates some tools that I use heavily in production such as
+Claude Code into this configuration.
+
+#+BEGIN_SRC emacs-lisp
+  ;; TODO Setup Claude Code IDE
+
+  ;; TODO Setup Gptel
+  
+  ;; TOOD Explore other packages...
+#+END_SRC
+
+** COMMENT I would really like a Claude Code diff to review code that Claude has added
+
+* Attributions
+
+- [[https://github.com/jamescherti/minimal-emacs.d][minimal-emacs.d by James Cheri]]
+- [[https://github.com/SophieBosio/.emacs.d/blob/main/init.org?plain=1][Sophie Bosio's Emacs Configuration]]
