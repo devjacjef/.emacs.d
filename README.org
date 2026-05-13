@@ -20,33 +20,268 @@ The following steps can be used to clone and install my configuration.
 
 #+BEGIN_SRC shell
   git clone https://github.com/devjacjef/emacs ~/.emacs.d
-  # TODO Add Makefile
+  make install
 #+END_SRC
 
 To update my configuration the following steps can be followed.
 
 #+BEGIN_SRC shell
   git pull
-  # TODO Add Makefile
+  make update
+#+END_SRC
+* Tweaks
+
+General tweaks for this Emacs configuration to make sure things work as
+expected. Emacs at the time of writing this is starting the transition into
+Emacs 31. A lot of packages are upgrading their minimum version and this
+requires adding compatability with my current configuration and the latest Emacs
+version.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package compat
+    :ensure t)
 #+END_SRC
 
-* Asynchronous Package Manager
+Some packages require a more up-to-date version of =transient= which provides Emacs with nice menus.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package transient
+    :ensure t)
+#+END_SRC
+
+* Performance Enhancements
+
+To improve performance, tweaks can be made to the Emacs native compilation
+support to optimize how Emacs transforms Lisp packages into machine code. More
+information as to how this works and what has been added can be found [[https://www.jamescherti.com/compiling-emacs/][here]].
+
+#+BEGIN_SRC emacs-lisp :tangle pre-early-init.el
+  ;; Display the architecture using:
+  ;;   gcc -march=native -Q --help=target | grep march
+  ;;
+  ;; The above command asks the compiler to resolve native for your current CPU
+  ;; and display the resulting target. For example, if the output shows
+  ;; -march=skylake, you know that skylake is the identifier you should pass to
+  ;; -mtune and -march.
+  ;;
+  ;; TODO Add check for device
+  ;; TODO Dynamic function to check for CPU architecture
+  (setq my-cpu-architecture "znver3")
+
+  ;; `native-comp-compiler-options' specifies flags passed directly to the C
+  ;; compiler (for example, GCC) when compiling the Lisp-to-C output
+  ;; produced by the native compilation process. These flags affect code
+  ;; generation, optimization, and debugging information.
+  (setq native-comp-compiler-options `(;; The most meaningful optimizations:
+                                       "-O2"
+                                       ,(format "-mtune=%s" my-cpu-architecture)
+                                       ,(format "-march=%s" my-cpu-architecture)
+                                       ;; Reduce .eln size and compilation
+                                       ;; overhead.
+                                       "-g0"
+                                       ;; Good defensive choice for Emacs
+                                       ;; stability.
+                                       "-fno-omit-frame-pointer"
+                                       "-fno-finite-math-only"))
+
+  (setq native-comp-driver-options '(;; -Wl,-z,pack-relative-relocs compresses
+                                     ;; relocation tables to reduce file size and
+                                     ;; slightly improve load times.
+                                     "-Wl,-z,pack-relative-relocs"
+                                     ;; -Wl,-O2 applies standard linker-level
+                                     ;; optimizations (like string merging) to the
+                                     ;; generated shared object.
+                                     "-Wl,-O2"
+                                     ;; -Wl,--as-needed prevents the linker from
+                                     ;; recording dependencies on libraries that
+                                     ;; are not actually used by the code.
+                                     "-Wl,--as-needed"))
+#+END_SRC
 
 Emacs by default uses a synchronous package manager which works just fine
 however, is slower compared to an alternative called =elpaca=. Elpaca provides
 an asynchronous experience installing multiple packages at the same time.
 
+#+BEGIN_SRC emacs-lisp :tangle pre-init.el
+    ;; Elpaca bootstrap
+    (defvar elpaca-installer-version 0.11)
+    (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
+    (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
+    (defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
+    (defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
+                                  :ref nil :depth 1 :inherit ignore
+                                  :files (:defaults "elpaca-test.el" (:exclude "extensions"))
+                                  :build (:not elpaca--activate-package)))
+    (let* ((repo  (expand-file-name "elpaca/" elpaca-repos-directory))
+           (build (expand-file-name "elpaca/" elpaca-builds-directory))
+           (order (cdr elpaca-order))
+           (default-directory repo))
+      (add-to-list 'load-path (if (file-exists-p build) build repo))
+      (unless (file-exists-p repo)
+        (make-directory repo t)
+        (when (<= emacs-major-version 28) (require 'subr-x))
+        (condition-case-unless-debug err
+            (if-let* ((buffer (pop-to-buffer-same-window "*elpaca-bootstrap*"))
+                      ((zerop (apply #'call-process `("git" nil ,buffer t "clone"
+                                                      ,@(when-let* ((depth (plist-get order :depth)))
+                                                          (list (format "--depth=%d" depth) "--no-single-branch"))
+                                                      ,(plist-get order :repo) ,repo))))
+                      ((zerop (call-process "git" nil buffer t "checkout"
+                                            (or (plist-get order :ref) "--"))))
+                      (emacs (concat invocation-directory invocation-name))
+                      ((zerop (call-process emacs nil buffer nil "-Q" "-L" "." "--batch"
+                                            "--eval" "(byte-recompile-directory \".\" 0 'force)")))
+                      ((require 'elpaca))
+                      ((elpaca-generate-autoloads "elpaca" repo)))
+                (progn (message "%s" (buffer-string)) (kill-buffer buffer))
+              (error "%s" (with-current-buffer buffer (buffer-string))))
+          ((error) (warn "%s" err) (delete-directory repo 'recursive))))
+      (unless (require 'elpaca-autoloads nil t)
+        (require 'elpaca)
+        (elpaca-generate-autoloads "elpaca" repo)
+        (let ((load-source-file-function nil)) (load "./elpaca-autoloads"))))
+    (add-hook 'after-init-hook #'elpaca-process-queues)
+    (elpaca `(,@elpaca-order))
+
+    ;; Enable 'elpaca-no-symlink-mode' on Windows, as symlink creation
+    ;; often fails without Administrator privileges or Developer Mode.
+    (when (eq system-type 'windows-nt)
+      (elpaca-no-symlink-mode 1))
+
+    ;; Install use-package support
+    (elpaca elpaca-use-package
+      ;; Enable use-package :ensure support for Elpaca.
+      (elpaca-use-package-mode))
+#+END_SRC
+
+To make Emacs run faster, code can be compiled down to native code using
+=compile-angel=.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  ;; Native compilation enhances Emacs performance by converting Elisp code into
+  ;; native machine code, resulting in faster execution and improved
+  ;; responsiveness.
+  ;;
+  ;; Ensure adding the following compile-angel code at the very beginning
+  ;; of your `~/.emacs.d/post-init.el` file, before all other packages.
+  (use-package compile-angel
+    :demand t
+    :config
+    ;; The following disables compilation of packages during installation;
+    ;; compile-angel will handle it.
+    (setq package-native-compile nil)
+
+    ;; Set `compile-angel-verbose' to nil to disable compile-angel messages.
+    ;; (When set to nil, compile-angel won't show which file is being compiled.)
+    (setq compile-angel-verbose t)
+
+    ;; The following directive prevents compile-angel from compiling your init
+    ;; files. If you choose to remove this push to `compile-angel-excluded-files'
+    ;; and compile your pre/post-init files, ensure you understand the
+    ;; implications and thoroughly test your code. For example, if you're using
+    ;; the `use-package' macro, you'll need to explicitly add:
+    ;; (eval-when-compile (require 'use-package))
+    ;; at the top of your init file.
+    (push "/init.el" compile-angel-excluded-files)
+    (push "/early-init.el" compile-angel-excluded-files)
+    (push "/pre-init.el" compile-angel-excluded-files)
+    (push "/post-init.el" compile-angel-excluded-files)
+    (push "/pre-early-init.el" compile-angel-excluded-files)
+    (push "/post-early-init.el" compile-angel-excluded-files)
+
+    ;; A local mode that compiles .el files whenever the user saves them.
+    ;; (add-hook 'emacs-lisp-mode-hook #'compile-angel-on-save-local-mode)
+
+    ;; A global mode that compiles .el files prior to loading them via `load' or
+    ;; `require'. Additionally, it compiles all packages that were loaded before
+    ;; the mode `compile-angel-on-load-mode' was activated.
+    (compile-angel-on-load-mode 1))
+#+END_SRC
+
 * Aesthetics
 
-Configures visual adjustments to my liking. This involves creating more spacing
-around windows, a cleaner mode-line and colour scheme adjustments.
+Emacs provide lots of flexiblity when customising the graphical interface. My
+tweaks to the graphics involve providing clearer information on the modeline and
+adjusting the colour scheme.
 
-#+BEGIN_SRC emacs-lisp
-  ;; TODO Setup Spacious Padding
+** Mode Line
 
-  ;; TODO Setup Custom Mode-line
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package minions
+    :init
+    (minions-mode)
+    :config
+    (setq minions-mode-line-delimiters nil)
+    :bind
+    ("<M-down-mouse-3>" . minions-minor-modes-menu))
 
-  ;; TODO Setup Nice Colour Scheme
+  (defun my-modeline--display-time ()
+    "Display the time as HH:MM"
+    (format-time-string " %H:%M "))
+
+  (defvar my-modeline-display-time
+    '(:eval (my-modeline--display-time))
+    "Mode-line construct to display the time.")
+
+  (defvar my-modeline-buffer-name
+    '(:eval (format " %s " (buffer-name)))
+    "Mode-line construct to display the buffer's name.")
+
+  (put 'my-modeline-buffer-name 'risky-local-variable t)
+  (put 'my-modeline-display-time 'risky-local-variable t)
+  (put 'minions-mode-line-modes 'risky-local-variable t)
+
+  (setq-default mode-line-format
+                '("%e"
+                  my-modeline-display-time
+                  " "
+                  my-modeline-buffer-name
+                  " "
+                  vc-mode               
+                  " "
+                  global-mode-string
+                  ))
+#+END_SRC
+
+** Colour Scheme
+
+For colour schemes the package =ef-themes= provides a wide range of themes from
+Protesilaos Stavrou. The themes provided by this configuration are quite diverse
+meaning theres more options for if I wish to switch.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package ef-themes
+  :ensure t
+  :init
+  ;; This makes the Modus commands listed below consider only the Ef
+  ;; themes.  For an alternative that includes Modus and all
+  ;; derivative themes (like Ef), enable the
+  ;; `modus-themes-include-derivatives-mode' instead.  The manual of
+  ;; the Ef themes has a section that explains all the possibilities:
+  ;;
+  ;; - Evaluate `(info "(ef-themes) Working with other Modus themes or taking over Modus")'
+  ;; - Visit <https://protesilaos.com/emacs/ef-themes#h:6585235a-5219-4f78-9dd5-6a64d87d1b6e>
+  (ef-themes-take-over-modus-themes-mode 1)
+  :bind
+  (("<f5>" . modus-themes-rotate)
+   ("C-<f5>" . modus-themes-select)
+   ("M-<f5>" . modus-themes-load-random))
+  :config
+  ;; All customisations here.
+  (setq modus-themes-mixed-fonts t)
+  (setq modus-themes-italic-constructs t)
+
+  ;; Finally, load your theme of choice (or a random one with
+  ;; `modus-themes-load-random', `modus-themes-load-random-dark',
+  ;; `modus-themes-load-random-light').
+  (modus-themes-load-theme 'ef-summer))
+#+END_SRC
+
+** Font
+
+The font for Emacs is okay but can be a little hard to read.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
 #+END_SRC
 
 * Completion
@@ -82,7 +317,9 @@ complete completion experience.
 
 * Search Utilities
 
-** TODO Add description
+Whilst editing code or text search utilities make it much faster to find code.
+Emacs by default has good searching capability but more modern solutions have
+came out that provide a better user experience or much faster performance.
 
 #+BEGIN_SRC emacs-lisp 
   ;; TODO Setup Consult
@@ -97,27 +334,49 @@ tailored to Web Development with occasional investments into other domains.
 
 ** Tree-sitter
 
-** TODO Add description
+Tree-sitter is used to parse code to an Abstract Syntax Tree which then helps
+the environment with highlighting and formatting text correctly. Emacs now has
+native support for Tree-sitters however, the installation can be tricky so
+additional packages are installed alongside it to streamline the process of
+installing Tree-sitters and loading theme alongside themes.
+
+#+BEGIN_SRC emacs-lisp 
+  ;; TODO Setup Tree-sitter
+
+  ;; TODO Setup Tree-sit-auto
+#+END_SRC
 
 ** Programming Languages
 
-*** TODO Add description
+This configuration is primarily tailored to Web Development with occasional
+branches into other domains. I am a Web Developer and a student who plans to use
+this environment for getting work done.
 
 *** PHP
 
-**** TODO Add description
+PHP is the primary language that I use in production as a Backend Web Developer.
+My main experience with PHP is through the framework Laravel which abstracts
+lots of tools and requires that I install additional dependencies in-order to
+make sure I am getting as much completion options as I can from the LSP.
 
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+#+END_SRC
 *** JS/TS
 
-**** TODO Add description
+Javascript and Typescript have become my secondary language overtime as they are
+the default choice for providing interactive content to the web on top of being
+great languages for the Backend. I primarily use these languages with the
+framework Vue.js which means additional setup will have to be done to ensure I
+can work without any interruptions.
 
-*** HTML/CSS
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+#+END_SRC
 
-**** TODO Add description
-
-* Org
-
-** TODO Add description
+#+BEGIN_COMMENT
+In future, I need to setup Java and Python in anticipation for the coursework
+that I am going to be doing. I also need to setup Docker too to make sure I have
+completion options for when I am trying to scaffold containers.
+#+END_COMMENT
 
 * LSP
 
@@ -125,10 +384,33 @@ This is setup for my LSP client that I will be using for my Emacs environment.
 Emacs provides a built-in LSP client called =eglot= which is light-weight and
 fit for use.
 
-#+BEGIN_SRC emacs-lisp
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
   ;; TODO Setup Eglot
+#+END_SRC
 
+To ensure that =eglot= plays nice with Typescript and Vue I have added a package
+that provides pre-configured code for locating the Typescript SDK and the calls
+required for LSPs such as =rassumfrassum= the LSP multi-plexer developed by the
+author of =eglot=.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
   ;; TODO Setup Eglot Typescript Setup
+#+END_SRC
+
+* Org Mode
+
+Org Mode is the feature that makes a lot of Emacs users come to Emacs in the
+first place. It is one of, if not the most, powerful ways of writing text with
+lots of extensibility to the point of having a Jupyter notebook-esque workflow
+where you can execute code blocks and see their result without lots of
+configuration and installation.
+
+My intention for using Org Mode is to capture notes for day-to-day things as
+well as do lots of writing discussing interests of mine or research I am doing
+for a project.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  ;; TODO Setup Org Mode
 #+END_SRC
 
 * Git
@@ -137,8 +419,19 @@ Git version control is a vital part of my workflow in any environment. Emacs
 pioneered GUI VCS with =magit= which remains the most useful tool for Git in any
 editor.
 
-#+BEGIN_SRC emacs-lisp
-  ;; TODO Setup Magit
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package magit
+    :ensure t)
+#+END_SRC
+
+* Terminal Emulation
+
+Emacs provides terminal emulation by default however, it is not very fast. There
+are many options with what to use but this configuration will use =vterm=.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package vterm
+      :ensure t)
 #+END_SRC
 
 * Agentic Engineering
@@ -151,17 +444,20 @@ their configurations.
 My configuration integrates some tools that I use heavily in production such as
 Claude Code into this configuration.
 
-#+BEGIN_SRC emacs-lisp
-  ;; TODO Setup Claude Code IDE
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package claude-code-ide
+    :vc (:url "https://github.com/manzaltu/claude-code-ide.el" :rev :newest)
+    :bind ("C-c C-'" . claude-code-ide-menu) ; Set your favorite keybinding
+    :config
+    (claude-code-ide-emacs-tools-setup)) 
 
   ;; TODO Setup Gptel
-  
+
   ;; TOOD Explore other packages...
 #+END_SRC
 
-** COMMENT I would really like a Claude Code diff to review code that Claude has added
-
 * Attributions
 
-- [[https://github.com/jamescherti/minimal-emacs.d][minimal-emacs.d by James Cheri]]
+- [[https://github.com/jamescherti/minimal-emacs.d][minimal-emacs.d by James Cherti]]
 - [[https://github.com/SophieBosio/.emacs.d/blob/main/init.org?plain=1][Sophie Bosio's Emacs Configuration]]
+- [[https://www.jamescherti.com/compiling-emacs/][A Technical Guide to Compiling Emacs for Performance on Linux and Unix systems by James Cherti]]

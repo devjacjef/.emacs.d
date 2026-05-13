@@ -1,6 +1,10 @@
 EMACS_DIR ?= $(HOME)/.emacs.d
 MIN_EMACS_RAW := https://raw.githubusercontent.com/jamescherti/minimal-emacs.d/main
 
+install:
+	@echo "Installing Jack's Emacs Configuration."
+	@sh install.sh
+
 update:
 	@echo "Updating the Emacs configuration files."
 	@git pull
