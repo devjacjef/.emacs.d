@@ -14,9 +14,11 @@ environment that can match my preferred workflows. A lot of this configuration
 is snippets I have lifted from others and I have attributed them correctly at
 the bottom of this configuration.
 
+**THIS SETUP IS NOT PRODUCTION READY. DO NOT ATTEMPT TO USE IT IN PRODUCTION.**
+
 * Setup
 
-The following steps can be used to clone and install my configuration.
+The following steps can be used to clone and install my configuration. This will install and compile Emacs from source.
 
 #+BEGIN_SRC shell
   git clone https://github.com/devjacjef/emacs ~/.emacs.d
@@ -293,8 +295,15 @@ Popular packages for tackling 'completion-at-point' include =corfu= and to
 manage it's 'completion-at-point-functions' combined with =cape= to provide some
 extensions. 
 
-#+BEGIN_SRC emacs-lisp 
-  ;; TODO Setup Corfu
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package corfu
+    :init (global-corfu-mode)
+    :custom
+    (corfu-auto t)
+    (corfu-auto-delay 0.1)
+    (corfu-auto-prefix 2)
+    (corfu-cycle t)
+    (tab-always-indent 'complete))
 
   ;; TODO Setup Cape
 #+END_SRC
@@ -340,10 +349,21 @@ native support for Tree-sitters however, the installation can be tricky so
 additional packages are installed alongside it to streamline the process of
 installing Tree-sitters and loading theme alongside themes.
 
-#+BEGIN_SRC emacs-lisp 
-  ;; TODO Setup Tree-sitter
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package treesit-auto
+  :custom
+  (treesit-auto-install 'prompt)
+  :config
+  (treesit-auto-add-to-auto-mode-alist 'all)
+  (global-treesit-auto-mode))
 
-  ;; TODO Setup Tree-sit-auto
+  (setq treesit-language-source-alist
+        '((vue "https://github.com/ikatyang/tree-sitter-vue")
+          (css "https://github.com/tree-sitter/tree-sitter-css" "v0.23.2")
+          (typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
+          (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")))
+
+  (mapc #'treesit-install-language-grammar '(vue css))
 #+END_SRC
 
 ** Programming Languages
@@ -360,7 +380,11 @@ lots of tools and requires that I install additional dependencies in-order to
 make sure I am getting as much completion options as I can from the LSP.
 
 #+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package php-ts-mode
+    :ensure nil ;; built-in for Emacs 30+
+    )
 #+END_SRC
+
 *** JS/TS
 
 Javascript and Typescript have become my secondary language overtime as they are
@@ -370,7 +394,29 @@ framework Vue.js which means additional setup will have to be done to ensure I
 can work without any interruptions.
 
 #+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (use-package typescript-ts-mode
+    :ensure nil)
 #+END_SRC
+
+To make sure that Vue is also supported the following package can be added to
+provide a tree-sitter for Vue.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  (add-to-list 'load-path (concat user-emacs-directory "vue-ts-mode"))
+  (require 'vue-ts-mode)
+#+END_SRC
+
+*** Python
+
+Python is the optimal language for AI/ML. This language is going to be used for
+an projects I have to do that makes use of AI libraries specifically for tasks
+involving LLMs.
+
+#+BEGIN_SRC emacs-lisp :tangle post-init.el
+  ;; TODO Configure things for Python
+#+END_SRC
+
+*** Java
 
 #+BEGIN_COMMENT
 In future, I need to setup Java and Python in anticipation for the coursework
@@ -385,7 +431,9 @@ Emacs provides a built-in LSP client called =eglot= which is light-weight and
 fit for use.
 
 #+BEGIN_SRC emacs-lisp :tangle post-init.el
-  ;; TODO Setup Eglot
+  (use-package eglot
+    :ensure nil
+    :hook (prog-mode . eglot-ensure))
 #+END_SRC
 
 To ensure that =eglot= plays nice with Typescript and Vue I have added a package
@@ -394,7 +442,15 @@ required for LSPs such as =rassumfrassum= the LSP multi-plexer developed by the
 author of =eglot=.
 
 #+BEGIN_SRC emacs-lisp :tangle post-init.el
-  ;; TODO Setup Eglot Typescript Setup
+  (use-package eglot-typescript-preset
+    :vc (:url "https://github.com/mwolson/eglot-typescript-preset"
+         :main-file "eglot-typescript-preset.el")
+    :custom
+    (eglot-typescript-preset-vue-lsp-server 'rass)
+    (eglot-typescript-preset-vue-rass-tools
+     '(vue-language-server
+       typescript-language-server
+       tailwindcss-language-server)))
 #+END_SRC
 
 * Org Mode
@@ -461,3 +517,4 @@ Claude Code into this configuration.
 - [[https://github.com/jamescherti/minimal-emacs.d][minimal-emacs.d by James Cherti]]
 - [[https://github.com/SophieBosio/.emacs.d/blob/main/init.org?plain=1][Sophie Bosio's Emacs Configuration]]
 - [[https://www.jamescherti.com/compiling-emacs/][A Technical Guide to Compiling Emacs for Performance on Linux and Unix systems by James Cherti]]
+- [[https://www.linkhub.dk/setting-emacs-php-development-lsp-tree-sitter-and-xdebug][Setting Up Emacs for PHP Development: LSP, Tree-sitter, and Xdebug]]
